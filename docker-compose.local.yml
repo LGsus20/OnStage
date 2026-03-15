@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    volumes:
+      - ./music_files:/code/music_files
+      - ./app:/code/app
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    environment:
+      - RELOAD_SERVER=True
+    restart: unless-stopped

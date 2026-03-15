@@ -1,0 +1,22 @@
+services:
+  app:
+    build: .
+    volumes:
+      - ./music_files:/code/music_files
+      - ./app:/code/app
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    # env_file:
+    #   - .env
+    restart: unless-stopped
+    depends_on:
+      - app

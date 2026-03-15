@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv
+.vscode
+.git
+.gitignore
+Music/
+music_files/
+TO_DOS.txt
+run.sh
+Dockerfile
+docker-compose.yml

@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OnStage Dashboard</title>
+    <style>
+        body { font-family: sans-serif; height: 100vh; background-color: #f0f0f0; margin: 0; padding: 0; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; }
+        
+        .success-box { 
+            background: white; 
+            padding: 1.5rem; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+            height: 100%; 
+            width: 100%; 
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+        }
+
+        .header {
+            flex-shrink: 0; 
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+
+        .container { 
+            display: flex; 
+            flex-direction: row; 
+            gap: 1.5rem; 
+            width: 100%; 
+            flex-grow: 1; 
+            min-height: 0; /* Critical for nested flex scrolling */
+            text-align: left;
+        }
+        
+        .control-panel { 
+            flex: 1; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 1.5rem;
+            min-height: 0; /* Allow shrinking */
+            overflow-y: auto; /* Allow scrolling if controls get too tall */
+            padding-right: 0.5rem;
+        }
+        
+        .music-list-panel { 
+            flex: 2; 
+            display: flex;
+            flex-direction: column;
+            background: white; 
+            border-radius: 8px;
+            min-height: 0; /* Allow shrinking */
+            border: 1px solid #dee2e6; /* moved border to container */
+        }
+
+        /* Adjust internal cards to fit better */
+        .card {
+            background: #f8f9fa; 
+            padding: 1rem; 
+            border-radius: 8px; 
+            border: 1px solid #dee2e6;
+        }
+
+        h1 { color: #28a745; margin: 0 0 0.5rem 0; font-size: 1.5rem; }
+        h3 { margin-top: 0; font-size: 1.1rem; }
+        p { margin-bottom: 0.5rem; }
+        
+        a.btn { text-decoration: none; padding: 0.5rem 1rem; background-color: #007bff; color: white; border-radius: 4px; display: inline-block; cursor: pointer; text-align: center; border: none; font-size: 0.9rem;}
+        button.btn { cursor: pointer; border: none; border-radius: 4px; color: white; }
+    </style>
+</head>
+<body>
+    <div class="success-box">
+        <div class="header">
+            <h1>Welcome to OnStage!</h1>
+            <p>Logged in as <span style="font-weight: bold;">{{ username }}</span></p>
+        </div>
+
+        <div class="container">
+            
+            <!-- Left Column: Controls & Queue -->
+            <div class="control-panel">
+                
+                <!-- Player -->
+                <div class="card">
+                    <h3>Now Playing</h3>
+                    <p id="now-playing" style="font-weight: bold; color: #0056b3; margin-bottom: 0.5rem; min-height: 1.2em;">Wait...</p>
+                    <audio id="audio-player" controls style="width: 100%;"></audio>
+                    <div style="margin-top: 1rem; text-align: right;">
+                        <a href="/history/download" class="btn" style="background-color: #17a2b8; font-size: 0.8rem;">Download Jam List</a>
+                    </div>
+                </div>
+
+                <!-- Downloader -->
+                <div class="card">
+                    <h3>Music Downloader</h3>
+                    <form action="/download" method="post" id="downloadForm" style="display: flex; gap: 0.5rem; flex-direction: column;">
+                        <input type="text" name="url" placeholder="YouTube URL" required style="width: 100%; padding: 0.5rem; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
+                        <button type="submit" class="btn" style="background-color: #28a745;">Download Music</button>
+                    </form>
+                    <div id="download-result" style="margin-top: 0.5rem; font-size: 0.85rem;"></div>
+                </div>
+
+                 <!-- Queue -->
+                <div class="card" style="flex-grow: 1; display: flex; flex-direction: column; min-height: 0;">
+                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                         <h3>Queue</h3>
+                         <button onclick="fairShuffle()" class="btn" style="background-color: #ffc107; color: #212529; font-size: 0.8rem; padding: 0.3rem 0.6rem;">Fair Shuffle</button>
+                     </div>
+                     <div id="queue-container" style="overflow-y: auto; flex-grow: 1;">
+                         <p style="color: #666; font-style: italic;">Queue is empty</p>
+                     </div>
+                </div>
+                
+                 <a href="/logout" class="btn" style="background-color: #6c757d; align-self: flex-start;">Logout</a>
+
+            </div>
+
+            <!-- Right Column: Music List -->
+            <div class="music-list-panel">
+                <div style="padding: 1rem; border-bottom: 2px solid #f0f0f0; flex-shrink: 0;">
+                    <h3 style="margin: 0;">Available Music</h3>
+                    <div style="text-align: right; margin-top: -1.5rem;">
+                        <button class="btn" onclick="updateMusicList()" style="background-color: #6c757d; font-size: 0.8rem; padding: 0.2rem 0.5rem;">Refresh</button>
+                    </div>
+                    <div style="margin-top: 1rem;">
+                        <input type="text" id="music-search" placeholder="Search by Artist or Song..." style="width: 100%; padding: 0.5rem; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
+                    </div>
+                </div>
+                <div style="overflow-y: auto; padding: 0 1rem 1rem 1rem; flex-grow: 1;">
+                    <ul id="music-list-ul" style="list-style: none; padding: 0; margin: 0;">
+                    {% for song in music_files %}
+                        <li style="padding: 0.75rem; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; gap: 1rem; transition: background-color 0.2s;">
+                            <span style="font-weight: 500; word-break: break-word; flex: 1;">{{ song }}</span>
+                            <div style="display: flex; gap: 0.5rem; flex-shrink: 0;">
+                                <button class="btn" style="padding: 0.3rem 0.6rem; font-size: 0.8rem; background-color: #007bff;" onclick="playSong('{{ song }}')">Play</button>
+                                <button class="btn" style="padding: 0.3rem 0.6rem; font-size: 0.8rem; background-color: #6f42c1;" onclick="addToQueue('{{ song }}', null)">Add to queue</button>
+                            </div>
+                        </li>
+                    {% endfor %}
+                    </ul>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+
+    <script>
+        const audioPlayer = document.getElementById('audio-player');
+        const nowPlayingText = document.getElementById('now-playing');
+        const queueContainer = document.getElementById('queue-container');
+        let currentSong = null;
+        let isSyncing = false; // Flag to prevent event loops
+
+        // Handle song end
+        audioPlayer.onended = async () => {
+             console.log("Song ended, requesting next...");
+             await playNext();
+        };
+
+        // Handle global pause/play
+        audioPlayer.onplay = async () => {
+             if (isSyncing) return;
+             console.log("User clicked Play -> sending Resume");
+             try {
+                await fetch('/resume', { method: 'POST' });
+             } catch(e) { console.error(e); }
+        };
+
+        audioPlayer.onpause = async () => {
+             if (isSyncing) return;
+             // Check if it's really a pause or just the song ending
+             if (audioPlayer.ended) return; 
+             
+             console.log("User clicked Pause -> sending Pause");
+             try {
+                await fetch('/pause', { method: 'POST' });
+             } catch(e) { console.error(e); }
+        };
+
+        async function playSong(filename) {
+            const formData = new FormData();
+            formData.append('filename', filename);
+            try {
+                const response = await fetch('/play', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                if(result.success) {
+                   console.log("Playing:", filename);
+                   // Force immediate sync to update UI
+                   syncState();
+                }
+            } catch(e) { console.error("Error playing", e); }
+        }
+
+        async function addToQueue(filename, position) {
+            const formData = new FormData();
+            const payload = { filename: filename, position: position };
+            try {
+                const response = await fetch('/queue/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (response.ok) {
+                    console.log("Added to queue from user request");
+                    // Force a re-sync
+                    syncState();
+                } else {
+                    console.error("Failed to add to queue");
+                }
+            } catch(e) { console.error("Error adding to queue", e); }
+        }
+
+        async function moveQueueItem(sourceIndex, targetIndex) {
+            try {
+                // If dropping item 6 (index 5) onto item 1 (index 0).
+                const response = await fetch('/queue/move', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ old_index: sourceIndex, new_index: targetIndex })
+                });
+                
+                if (response.ok) {
+                    console.log(`Moved item from ${sourceIndex} to ${targetIndex}`);
+                    syncState();
+                } else {
+                    console.error("Failed to move item");
+                }
+            } catch(e) { console.error("Error moving item", e); }
+        }
+
+        async function fairShuffle() {
+            try {
+                const response = await fetch('/queue/fair-shuffle', {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    console.log("Queue shuffled");
+                    syncState();
+                }
+            } catch(e) { console.error("Error shuffling", e); }
+        }
+
+        async function removeFromQueue(index) {
+            if (confirm("Are you sure you want to remove this song from the queue?")) {
+                try {
+                    const response = await fetch('/queue/remove/' + index, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        console.log("Removed from queue");
+                        syncState();
+                    }
+                } catch(e) { console.error("Error removing from queue", e); }
+            }
+        }
+
+        async function playNext() {
+             const formData = new FormData();
+             if (currentSong) {
+                 formData.append('current_finished_song', currentSong);
+             }
+
+             try {
+                const response = await fetch('/queue/next', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                if(result.success) {
+                    console.log("Playing next:", result.current_song);
+                    syncState();
+                }
+             } catch(e) { console.error("Error playing next", e); }
+        }
+        
+        function renderQueue(queue, currentIndex) {
+            queueContainer.innerHTML = '';
+            if (!queue || queue.length === 0) {
+                 queueContainer.innerHTML = '<p style="color: #666; font-style: italic;">Queue is empty</p>';
+                 return;
+            }
+            
+            const ul = document.createElement('ul');
+            ul.style.listStyle = 'none';
+            ul.style.padding = '0';
+            ul.style.margin = '0';
+            
+            queue.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.style.padding = '0.75rem 0.5rem';
+                li.style.borderBottom = '1px solid #e9ecef';
+                li.style.fontSize = '0.9rem';
+                li.style.display = 'flex';
+                li.style.justifyContent = 'space-between';
+                li.style.alignItems = 'center';
+                
+                li.draggable = true;
+                li.ondragstart = (e) => {
+                    e.dataTransfer.setData('sourceIndex', index);
+                    e.dataTransfer.effectAllowed = 'move';
+                    li.style.opacity = '0.4';
+                };
+                li.ondragend = () => {
+                   li.style.opacity = '1';
+                };
+                
+                // Important: we need to handle dragover on the list item to know where we are dropping
+                li.ondragover = (e) => {
+                     e.preventDefault(); 
+                     e.dataTransfer.dropEffect = 'move';
+                     li.style.backgroundColor = '#e2e6ea';
+                };
+                li.ondragleave = () => {
+                     li.style.backgroundColor = '';
+                };
+                
+                li.ondrop = async (e) => {
+                    e.preventDefault();
+                    li.style.backgroundColor = '';
+                    const sourceIndex = parseInt(e.dataTransfer.getData('sourceIndex'));
+                    // e.dataTransfer.getData might be empty in some browsers during drop if not set correctly or cross-origin, 
+                    // but here it is same origin.
+                    
+                    if (isNaN(sourceIndex) || sourceIndex === index) return;
+                    
+                    await moveQueueItem(sourceIndex, index);
+                };
+
+                const leftDiv = document.createElement('div');
+                leftDiv.style.flex = '1';
+                leftDiv.style.minWidth = '0';
+                leftDiv.style.marginRight = '0.5rem';
+                leftDiv.style.display = 'flex';
+                leftDiv.style.alignItems = 'center';
+                // Add a small drag handle icon
+                const dragHandle = document.createElement('span');
+                dragHandle.innerHTML = '&#9776;'; // Hamburger icon
+                dragHandle.style.marginRight = '0.5rem';
+                dragHandle.style.cursor = 'grab';
+                dragHandle.style.color = '#adb5bd';
+                
+                leftDiv.appendChild(dragHandle);
+
+                const textSpan = document.createElement('span');
+                textSpan.textContent = `${index + 1}. ${item.filename}`;
+                textSpan.style.overflow = 'hidden';
+                textSpan.style.textOverflow = 'ellipsis';
+                textSpan.style.whiteSpace = 'nowrap';
+                textSpan.style.marginRight = '0.5rem';
+
+                leftDiv.appendChild(textSpan);
+
+                const rightDiv = document.createElement('div');
+                rightDiv.style.display = 'flex';
+                rightDiv.style.alignItems = 'center';
+                rightDiv.style.gap = '0.5rem';
+                rightDiv.style.flexShrink = '0';
+
+                const badge = document.createElement('span');
+                badge.textContent = item.requested_by;
+                badge.style.fontSize = '0.75rem';
+                badge.style.backgroundColor = '#e9ecef';
+                badge.style.padding = '0.1rem 0.4rem';
+                badge.style.borderRadius = '4px';
+                badge.style.color = '#495057';
+                badge.style.whiteSpace = 'nowrap';
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = '×';
+                deleteBtn.className = 'btn';
+                deleteBtn.style.backgroundColor = '#dc3545';
+                deleteBtn.style.padding = '0';
+                deleteBtn.style.width = '20px';
+                deleteBtn.style.height = '20px';
+                deleteBtn.style.lineHeight = '20px'; // Center vertically
+                deleteBtn.style.fontSize = '14px';
+                deleteBtn.style.borderRadius = '50%';
+                deleteBtn.onclick = () => removeFromQueue(index + 1); // Pass 1-based index (logic in server) or 0-based? Let's assume server takes 1-based or 0-based. I will implement 0-based on server but pass index here.
+                // Wait, users see 1-based. Usually API takes 0-based index or position.
+                // Let's pass 0-based index
+                deleteBtn.onclick = () => removeFromQueue(index);
+
+                
+                rightDiv.appendChild(badge);
+                rightDiv.appendChild(deleteBtn);
+                
+                li.appendChild(leftDiv);
+                li.appendChild(rightDiv);
+                ul.appendChild(li);
+            });
+            queueContainer.appendChild(ul);
+        }
+
+        async function syncState() {
+            try {
+                const response = await fetch('/state'); // Check for consistent state
+                if (!response.ok) return;
+                
+                const data = await response.json();
+                
+                // Update Queue UI
+                // Note: state.queue is what server returns
+                renderQueue(data.queue, 0); 
+                
+                if (data.is_playing && data.current_song) {
+                    const serverStartTime = new Date(data.start_time).getTime(); // Server time UTC
+                    const serverCurrentTime = new Date(data.server_time).getTime(); // Server time UTC
+                    
+                    // How many seconds into the song "should" we be?
+                    // We calculate relative to server's own clock to avoid timezone issues local vs server
+                    const secondsElapsed = (serverCurrentTime - serverStartTime) / 1000;
+                    
+                    // Update UI text
+                    nowPlayingText.textContent = "Now Playing: " + data.current_song;
+
+                    // If song changed (or just started), load and play
+                    if (currentSong !== data.current_song) {
+                        currentSong = data.current_song;
+                        
+                        // Set the source
+                        audioPlayer.src = "/music/" + encodeURIComponent(currentSong);
+                        audioPlayer.load(); // Important to load metadata
+                        
+                        // Set start position
+                        audioPlayer.currentTime = Math.max(0, secondsElapsed);
+                        
+                        try {
+                            if (!data.is_paused) {
+                                isSyncing = true;
+                                await audioPlayer.play();
+                                isSyncing = false;
+                            }
+                        } catch (e) {
+                            console.log("Autoplay might be blocked by browser:", e);
+                            isSyncing = false;
+                        }
+                    } else {
+                        // Song is the same
+                        
+                        // Check Pause State Sync
+                        if (data.is_paused) {
+                            if (!audioPlayer.paused) {
+                                console.log("Server is paused -> Pausing local player");
+                                isSyncing = true;
+                                audioPlayer.pause();
+                                isSyncing = false;
+                            }
+                        } else {
+                            // Server is playing
+                            if (audioPlayer.paused) {
+                                console.log("Server is playing -> Resuming local player");
+                                isSyncing = true;
+                                audioPlayer.play().catch(e => console.log("Autoplay blocked", e)).finally(() => isSyncing = false);
+                            }
+                        }
+
+                        // Check Drift (only if playing)
+                        if (!data.is_paused && !audioPlayer.paused) {
+                            const currentLocalTime = audioPlayer.currentTime;
+                            const drift = Math.abs(currentLocalTime - secondsElapsed);
+                            const allowedDeviation = data.sync_deviation || 3;
+
+                            if (drift > allowedDeviation) {
+                                console.log(`Resyncing. Local: ${currentLocalTime}, Server expects: ${secondsElapsed}`);
+                                audioPlayer.currentTime = secondsElapsed;
+                            }
+                        }
+                    }
+                } else {
+                    // Not playing anything
+                    if (currentSong !== null) {
+                        nowPlayingText.textContent = "No music playing";
+                        audioPlayer.pause();
+                        currentSong = null;
+                        audioPlayer.src = "";
+                    }
+                }
+
+            } catch (error) {
+                console.error("Sync error:", error);
+            }
+        }
+
+        // Poll every X miliseconds to check state (reduced frequency to prevent spam)
+        setInterval(syncState, 5000);
+        
+        // Initial check
+        syncState();
+
+        function applySearch() {
+            const input = document.getElementById('music-search');
+            // Normalize search query: lowercase and replace underscores with spaces
+            const filter = input.value.toLowerCase().replace(/_/g, ' ');
+            const ul = document.getElementById('music-list-ul');
+            const li = ul.getElementsByTagName('li');
+
+            for (let i = 0; i < li.length; i++) {
+                const span = li[i].getElementsByTagName("span")[0];
+                if (span) {
+                    const txtValue = span.textContent || span.innerText;
+                    // Normalize song name: lowercase and replace underscores with spaces for comparison
+                    const normalizedText = txtValue.toLowerCase().replace(/_/g, ' ');
+                    
+                    if (normalizedText.indexOf(filter) > -1) {
+                        li[i].style.display = "flex";
+                    } else {
+                        li[i].style.display = "none";
+                    }
+                }
+            }
+        }
+
+        document.getElementById('music-search').addEventListener('keyup', applySearch);
+
+        async function updateMusicList() {
+            try {
+                const response = await fetch('/music/list?t=' + Date.now());
+                if (!response.ok) {
+                    console.error("Failed to fetch music list:", response.status);
+                    return;
+                }
+                
+                const data = await response.json();
+                const files = data.files;
+                console.log("Updated music list, received", files.length, "songs");
+                
+                const ul = document.getElementById('music-list-ul');
+                ul.innerHTML = '';
+                
+                files.forEach(song => {
+                    const li = document.createElement('li');
+                    li.style.padding = '0.75rem';
+                    li.style.borderBottom = '1px solid #eee';
+                    li.style.display = 'flex';
+                    li.style.justifyContent = 'space-between';
+                    li.style.alignItems = 'center';
+                    li.style.gap = '1rem';
+                    li.style.transition = 'background-color 0.2s';
+                    
+                    const span = document.createElement('span');
+                    span.style.fontWeight = '500';
+                    span.style.wordBreak = 'break-word';
+                    span.style.flex = '1';
+                    span.textContent = song;
+                    
+                    const btnContainer = document.createElement('div');
+                    btnContainer.style.display = 'flex';
+                    btnContainer.style.gap = '0.5rem';
+                    btnContainer.style.flexShrink = '0';
+                    
+                    const playBtn = document.createElement('button');
+                    playBtn.className = 'btn';
+                    playBtn.style.padding = '0.3rem 0.6rem';
+                    playBtn.style.fontSize = '0.8rem';
+                    playBtn.style.backgroundColor = '#007bff';
+                    playBtn.textContent = 'Play';
+                    playBtn.onclick = () => playSong(song);
+
+                    const lastBtn = document.createElement('button');
+                    lastBtn.className = 'btn';
+                    lastBtn.style.padding = '0.3rem 0.6rem';
+                    lastBtn.style.fontSize = '0.8rem';
+                    lastBtn.style.backgroundColor = '#6f42c1';
+                    lastBtn.textContent = 'Add to queue';
+                    lastBtn.onclick = () => addToQueue(song, null);
+                    
+                    btnContainer.appendChild(playBtn);
+                    btnContainer.appendChild(lastBtn);
+                    
+                    li.appendChild(span);
+                    li.appendChild(btnContainer);
+                    ul.appendChild(li);
+                });
+                
+                // Re-apply search filter
+                applySearch();
+                
+            } catch(e) { console.error("Error updating music list", e); }
+        }
+
+        document.getElementById('downloadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const resultDiv = document.getElementById('download-result');
+            resultDiv.textContent = 'Downloading... please wait.';
+            resultDiv.style.color = 'blue';
+
+            const formData = new FormData(e.target);
+            try {
+                const response = await fetch('/download', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.textContent = `Success! Downloaded: ${data.title}`;
+                    resultDiv.style.color = 'green';
+                    updateMusicList();
+                } else {
+                    resultDiv.textContent = `Error: ${data.message || 'Unknown error'}`;
+                    resultDiv.style.color = 'red';
+                }
+            } catch (err) {
+                resultDiv.textContent = 'Failed to send request.';
+                resultDiv.style.color = 'red';
+            }
+        });
+    </script>
+</body>
+</html>
